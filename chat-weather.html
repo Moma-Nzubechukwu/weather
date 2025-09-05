@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simple Weather</title>
+  <style>
+    :root{
+      --bg:#0f172a;        /* slate-900 */
+      --card:#111827;      /* gray-900 */
+      --text:#e5e7eb;      /* gray-200 */
+      --muted:#9ca3af;     /* gray-400 */
+      --accent:#22d3ee;    /* cyan-400 */
+      --warn:#fca5a5;      /* red-300 */
+      --ok:#34d399;        /* emerald-400 */
+      --ring:rgba(34,211,238,.25);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+      background: radial-gradient(1200px 800px at 10% -10%, #1f2937, transparent), var(--bg);
+      color: var(--text); min-height:100dvh; display:grid; place-items:center; padding:24px;
+    }
+    .wrap{width:100%; max-width:860px}
+    header{display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:18px}
+    h1{font-size:clamp(1.25rem, 2vw + .5rem, 2rem); margin:0; letter-spacing:.3px}
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01));
+      border:1px solid rgba(255,255,255,.06);
+      border-radius:18px; padding:18px; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    form{
+      display:grid; grid-template-columns: 1fr auto auto; gap:10px; margin-bottom:14px
+    }
+    input[type="text"]{
+      width:100%; padding:12px 14px; border-radius:12px; border:1px solid rgba(255,255,255,.08); background:#0b1220; color:var(--text);
+      outline:none; box-shadow: 0 0 0 0 var(--ring);
+    }
+    input[type="text"]::placeholder{color:var(--muted)}
+    button{
+      padding:12px 14px; border-radius:12px; border:1px solid rgba(255,255,255,.08); background:#0b1220; color:var(--text);
+      cursor:pointer; transition:.15s transform ease, .2s box-shadow ease, .2s border-color ease;
+    }
+    button:hover{transform: translateY(-1px); box-shadow: 0 10px 20px rgba(34,211,238,.08)}
+    button.primary{background: linear-gradient(180deg, #0ea5b6, #0891b2); border-color: transparent}
+    .grid{
+      display:grid; gap:12px;
+      grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+    }
+    .tile{
+      background: var(--card); border:1px solid rgba(255,255,255,.06); border-radius:16px; padding:14px;
+    }
+    .city{font-weight:600; font-size:1.1rem}
+    .muted{color:var(--muted)}
+    .big{font-size:2.5rem; font-weight:700; line-height:1.1}
+    .row{display:flex; align-items:center; justify-content:space-between; gap:10px}
+    .badge{padding:4px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.1); font-size:.85rem}
+    .ok{color:var(--ok)} .warn{color:var(--warn)}
+    .foot{margin-top:10px; font-size:.85rem; color:var(--muted)}
+    .err{margin-top:8px; color:var(--warn)}
+    .hint{margin-top:10px; color:var(--muted); font-size:.9rem}
+    .fade{animation:fade .35s ease}
+    @keyframes fade{from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:translateY(0)}}
+    @media (max-width:540px){ form{grid-template-columns: 1fr 1fr; } .hide-sm{display:none} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Simple Weather</h1>
+      <div class="muted">Free • No API key • Single HTML</div>
+    </header>
+
+    <div class="card">
+      <form id="searchForm" autocomplete="off">
+        <input id="cityInput" type="text" placeholder="Enter a city (e.g., Enugu, Lagos, Abuja)" />
+        <button class="primary" type="submit">Get Weather</button>
+        <button type="button" id="geoBtn" title="Use your device location">Use My Location</button>
+      </form>
+      <div id="message" class="err" role="alert" aria-live="polite"></div>
+
+      <div id="results" class="grid fade" hidden>
+        <div class="tile">
+          <div class="row"><div class="city" id="placeName">—</div><div class="badge" id="tz">—</div></div>
+          <div class="muted" id="coords">—</div>
+          <div style="margin-top:10px" class="row">
+            <div class="big" id="temp">—</div>
+            <div style="text-align:right">
+              <div id="icon" style="font-size:2rem">⛅</div>
+              <div id="desc" class="muted">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tile">
+          <div class="row"><div>Feels like</div><div id="apparent" class="badge">—</div></div>
+          <div class="row"><div>Humidity</div><div id="humidity" class="badge">—</div></div>
+          <div class="row"><div>Wind</div><div id="wind" class="badge">—</div></div>
+          <div class="row"><div>Precipitation</div><div id="precip" class="badge">—</div></div>
+          <div class="row"><div>Daylight</div><div id="isday" class="badge">—</div></div>
+        </div>
+      </div>
+
+      <div class="hint">
+        Tip: “Use My Location” needs HTTPS (or run from a local file). If city results look wrong, include country (e.g., “Lagos, Nigeria”).
+      </div>
+      <div class="foot">Data by Open-Meteo</div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const message = $("message");
+    const results = $("results");
+
+    const WMO = new Map([
+      [[0], ["Clear sky","☀️"]],
+      [[1,2], ["Partly cloudy","⛅"]],
+      [[3], ["Overcast","☁️"]],
+      [[45,48], ["Fog","🌫️"]],
+      [[51,53,55], ["Drizzle","🌦️"]],
+      [[56,57], ["Freezing drizzle","🥶"]],
+      [[61,63,65], ["Rain","🌧️"]],
+      [[66,67], ["Freezing rain","🌨️"]],
+      [[71,73,75], ["Snow","❄️"]],
+      [[77], ["Snow grains","🌨️"]],
+      [[80,81,82], ["Rain showers","🌦️"]],
+      [[85,86], ["Snow showers","🌨️"]],
+      [[95], ["Thunderstorm","⛈️"]],
+      [[96,99], ["Thunderstorm w/ hail","⛈️"]]
+    ]);
+
+    function wmoToDesc(code){
+      for (const [keys, val] of WMO.entries()){
+        if (keys.includes(code)) return {text:val[0], icon:val[1]};
+      }
+      return {text:"—", icon:"⛅"};
+    }
+
+    async function geocodeCity(name){
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`;
+      const res = await fetch(url);
+      if(!res.ok) throw new Error("Geocoding failed");
+      const data = await res.json();
+      if(!data.results?.length) throw new Error("City not found");
+      const r = data.results[0];
+      return { lat:r.latitude, lon:r.longitude, name:`${r.name}${r.admin1 ? ", "+r.admin1 : ""}${r.country ? ", "+r.country : ""}` };
+    }
+
+    async function fetchWeather(lat, lon){
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m,relative_humidity_2m&timezone=auto`;
+      const res = await fetch(url);
+      if(!res.ok) throw new Error("Weather fetch failed");
+      return res.json();
+    }
+
+    function showError(msg){
+      message.textContent = msg;
+      results.hidden = true;
+    }
+
+    function showWeather(place, lat, lon, payload){
+      const c = payload.current;
+      const {text, icon} = wmoToDesc(c.weather_code);
+      $("placeName").textContent = place;
+      $("coords").textContent = `Lat ${lat.toFixed(3)}, Lon ${lon.toFixed(3)}`;
+      $("tz").textContent = payload.timezone || "—";
+      $("temp").textContent = `${Math.round(c.temperature_2m)}°C`;
+      $("apparent").textContent = `${Math.round(c.apparent_temperature)}°C`;
+      $("humidity").textContent = `${Math.round(c.relative_humidity_2m)}%`;
+      $("wind").textContent = `${Math.round(c.wind_speed_10m)} m/s`;
+      $("precip").textContent = `${c.precipitation ?? 0} mm`;
+      $("isday").textContent = c.is_day ? "Day" : "Night";
+      $("desc").textContent = text;
+      $("icon").textContent = icon;
+      message.textContent = "";
+      results.hidden = false;
+    }
+
+    $("searchForm").addEventListener("submit", async (e)=>{
+      e.preventDefault();
+      const q = $("cityInput").value.trim();
+      if(!q) return showError("Please enter a city.");
+      try{
+        showError(""); // clear
+        const g = await geocodeCity(q);
+        const w = await fetchWeather(g.lat, g.lon);
+        showWeather(g.name, g.lat, g.lon, w);
+      }catch(err){
+        showError(err.message || "Something went wrong.");
+      }
+    });
+
+    $("geoBtn").addEventListener("click", ()=>{
+      if(!navigator.geolocation){
+        return showError("Geolocation is not supported in this browser.");
+      }
+      showError("Getting your location…");
+      navigator.geolocation.getCurrentPosition(async (pos)=>{
+        try{
+          const {latitude:lat, longitude:lon} = pos.coords;
+          const w = await fetchWeather(lat, lon);
+          showWeather("Your Location", lat, lon, w);
+        }catch(err){
+          showError(err.message || "Could not load weather.");
+        }
+      }, (err)=>{
+        showError(err.message || "Location permission denied.");
+      }, {enableHighAccuracy:false, timeout:10000, maximumAge:300000});
+    });
+  </script>
+</body>
+</html>
+
